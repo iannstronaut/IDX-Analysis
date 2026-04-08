@@ -237,10 +237,11 @@ STRONG_BULLISH > BULLISH > NEUTRAL > BEARISH > STRONG_BEARISH
 **PROYEK INI HANYA UNTUK EDUKASI**
 
 1. **Bukan Financial Advice** - Analisis dan sinyal yang dihasilkan bukan rekomendasi jual/beli
-2. **Risiko Trading** - Trading saham memiliki risiko tinggi. Performa masa lalu tidak menjamin hasil masa depan
-3. **Tanggung Jawab Sendiri** - Selalu lakukan riset sendiri dan konsultasi dengan advisor keuangan berlisensi
-4. **Bukan Jaminan Profit** - Author tidak bertanggung jawab atas kerugian apapun
-5. **Yahoo Finance Terms of Service** - Aplikasi ini menggunakan library yfinance. Pengguna diharapkan mematuhi Terms of Service Yahoo Finance. Pengembang tidak bertanggung jawab atas penggunaan data di luar tujuan edukasi
+2. **Hasil Prediktif (Potensial)** - Semua analisis teknikal dan sinyal yang dihasilkan bersifat **prediktif/potensial** dan **tidak 100% pasti**. Pasar saham dipengaruhi oleh banyak faktor yang tidak dapat diprediksi dengan pasti
+3. **Risiko Trading** - Trading saham memiliki risiko tinggi. Performa masa lalu tidak menjamin hasil masa depan
+4. **Tanggung Jawab Sendiri** - Selalu lakukan riset sendiri dan konsultasi dengan advisor keuangan berlisensi
+5. **Bukan Jaminan Profit** - Author tidak bertanggung jawab atas kerugian apapun
+6. **Yahoo Finance Terms of Service** - Aplikasi ini menggunakan library yfinance. Pengguna diharapkan mematuhi Terms of Service Yahoo Finance. Pengembang tidak bertanggung jawab atas penggunaan data di luar tujuan edukasi
 
 **Gunakan dengan bijak dan trade at your own risk!**
 
@@ -257,3 +258,9 @@ Project ini menggunakan library open-source berikut:
 | **numpy** | Numerical computing | [numpy.org](https://numpy.org/) |
 
 Terima kasih kepada semua kontributor library di atas yang telah membuat project ini mungkin!
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
