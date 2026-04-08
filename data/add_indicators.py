@@ -136,7 +136,7 @@ def process_and_save(emiten="BBCA", interval="1d"):
     interval : str
         Data interval ('1d', '1wk', '1mo')
     """
-    from fetch_data import download_stock_data, save_data
+    from data.fetch_data import download_stock_data, save_data
     
     print(f"\n{'='*60}")
     print(f"Processing {emiten}.JK - 3 Years Data with Indicators")
