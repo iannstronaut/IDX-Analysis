@@ -1,37 +1,43 @@
 # IDX Technical Analysis Project
 
-Project analisis teknikal saham dengan flow:
+> **Disclaimer:** Proyek ini hanya untuk kebutuhan edukasi dan pembelajaran. Bukan sebagai ajakan, rekomendasi, atau saran untuk membeli/menjual saham. Gunakan dengan bijak dan tanggung jawab sendiri.
 
-1. **Fetch data 3 tahun** dari Yahoo Finance
-2. **Hitung semua indikator** (MA20, MA50, RSI, MACD, EMA Cross) untuk seluruh data
-3. **Save ke CSV** dengan format: `output/{EMITEN}_past_3_year.csv`
-4. **Evaluasi scoring** berdasarkan timeframe (hanya cek periode terakhir)
+Technical analysis tool untuk saham Indonesia Stock Exchange (IDX) menggunakan data dari Yahoo Finance.
+
+## Fitur
+
+- **Data Fetching:** Ambil data historis 3 tahun dari Yahoo Finance
+- **Technical Indicators:** MA20, MA50, RSI, MACD, EMA Cross
+- **Candlestick Patterns:** Deteksi Hammer, Engulfing, Doji, Marubozu, dll
+- **Signal Evaluation:** Evaluasi sinyal bullish/bearish dengan trend analysis
+- **Timeframe Scoring:** Scoring berdasarkan Daily (20 hari), Weekly (12 minggu), Monthly (12 bulan)
 
 ## Struktur Project
 
 ```
 analyziz/
-├── data/                      # Data scripts (fetch, add_indicators)
-│   ├── fetch_data.py
-│   └── add_indicators.py
-├── indicators/                # Individual indicator scripts
-│   ├── ma20.py
-│   ├── ma50.py
-│   ├── rsi.py
-│   ├── macd.py
-│   └── ema_cross.py
-├── evaluation/                # Evaluation scripts
-│   ├── scoring.py
-│   └── signal_eval.py
-├── utils/                     # Utility functions
-│   └── __init__.py
-├── output/                    # Output files (auto-created)
-│   ├── {EMITEN}_past_3_year.csv
-│   ├── {EMITEN}_summary_report.txt
-│   ├── {EMITEN}_report_{TIMEFRAME}.csv
-│   └── *.csv
-├── main.py                    # Orchestrator utama
-└── requirements.txt           # Dependencies
+├── config/
+│   ├── __init__.py            # Config module interface
+│   └── scoring_config.py      # Konfigurasi scoring (editable)
+├── data/
+│   ├── fetch_data.py          # Download data dari Yahoo Finance
+│   └── add_indicators.py      # Hitung semua indikator teknikal
+├── indicators/
+│   ├── ma20.py                # Moving Average 20
+│   ├── ma50.py                # Moving Average 50
+│   ├── rsi.py                 # Relative Strength Index
+│   ├── macd.py                # MACD Indicator
+│   └── ema_cross.py           # EMA 12/26 Crossover
+├── evaluation/
+│   ├── scoring.py             # Scoring berdasarkan timeframe
+│   └── signal_eval.py         # Evaluasi candlestick patterns
+├── utils/
+│   └── __init__.py            # Utility functions
+├── output/                    # Folder output (auto-generated)
+├── main.py                    # Orchestrator utama (simple)
+├── cli.py                     # Command Line Interface (advanced)
+├── requirements.txt
+└── .gitignore
 ```
 
 ## Instalasi
@@ -40,18 +46,50 @@ analyziz/
 pip install -r requirements.txt
 ```
 
-## Penggunaan
+## Cara Penggunaan
 
-### Complete Pipeline (Recommended)
+### Opsi 1: CLI (Recommended untuk Pengguna)
+
+Gunakan `cli.py` untuk interface yang lebih user-friendly dengan menu interaktif:
 
 ```bash
-# Analisis harian (evaluasi 20 hari terakhir dari 3 tahun data)
+# Lihat semua commands
+python cli.py --help
+
+# Interactive wizard mode (paling mudah)
+python cli.py interactive
+
+# Fetch data saja
+python cli.py fetch --emiten BBCA
+
+# Analisis lengkap
+python cli.py analyze --emiten BBRI --timeframe weekly
+
+# Scoring only
+python cli.py score --emiten TLKM --timeframe daily
+
+# Signal evaluation only
+python cli.py signal --emiten BBCA
+
+# View configuration
+python cli.py config view
+
+# Generate reports dari data existing
+python cli.py report --emiten BBCA --timeframe daily
+```
+
+### Opsi 2: Main.py (Simple)
+
+Untuk penggunaan cepat tanpa interaksi:
+
+```bash
+# Analisis harian - evaluasi 20 hari terakhir dari 3 tahun data
 python main.py
 
-# Analisis mingguan (evaluasi 12 minggu terakhir dari 3 tahun data)
+# Analisis mingguan - evaluasi 12 minggu terakhir
 python main.py --timeframe weekly
 
-# Analisis bulanan (evaluasi 12 bulan terakhir dari 3 tahun data)
+# Analisis bulanan - evaluasi 12 bulan terakhir
 python main.py --timeframe monthly
 
 # Ganti emiten (default: BBCA)
@@ -59,90 +97,130 @@ python main.py --emiten BBRI
 python main.py --emiten TLKM --timeframe weekly
 ```
 
-### Step-by-Step
+### Opsi 3: Step-by-Step (Advanced/Developer)
 
-**Step 1: Fetch Data + Add Indicators (3 Years)**
+Untuk kontrol penuh per module:
+
+**Step 1: Fetch Data + Hitung Indikator**
 
 ```bash
-python data/add_indicators.py
-
-# Atau dengan emiten lain
-python data/add_indicators.py --emiten BBRI
+python data/add_indicators.py --emiten BBCA
 ```
 
-Output: `output/BBCA_past_3_year.csv` (atau `output/BBRI_past_3_year.csv`)
+Output: `output/BBCA_past_3_year.csv`
 
 **Step 2: Run Evaluation Scoring**
 
 ```bash
-# Evaluasi 20 hari terakhir dari data 3 tahun
-python evaluation/scoring.py --timeframe daily
-
-# Evaluasi 12 minggu terakhir
-python evaluation/scoring.py --timeframe weekly
-
-# Evaluasi 12 bulan terakhir
-python evaluation/scoring.py --timeframe monthly
+python evaluation/scoring.py --emiten BBCA --timeframe daily
 ```
 
 **Step 3: Run Signal Evaluation**
 
 ```bash
-python evaluation/signal_eval.py
+python evaluation/signal_eval.py --emiten BBCA
 ```
 
 ## Output Files
 
-| File                                     | Deskripsi                              |
-| ---------------------------------------- | -------------------------------------- |
-| `output/{EMITEN}_past_3_year.csv`        | Data 3 tahun + semua indikator         |
-| `output/{EMITEN}_summary_report.txt`     | Laporan analisis overall (text)        |
+| File | Deskripsi |
+|------|-----------|
+| `output/{EMITEN}_past_3_year.csv` | Data 3 tahun + semua indikator |
+| `output/{EMITEN}_summary_report.txt` | Laporan analisis keseluruhan |
 | `output/{EMITEN}_report_{TIMEFRAME}.csv` | Data 3 tahun dipotong sesuai timeframe |
-| `output/ma20_analysis.csv`               | Hasil MA20 individual                  |
-| `output/ma50_analysis.csv`               | Hasil MA50 individual                  |
-| `output/rsi_analysis.csv`                | Hasil RSI individual                   |
-| `output/macd_analysis.csv`               | Hasil MACD individual                  |
-| `output/ema_cross_analysis.csv`          | Hasil EMA Cross individual             |
+| `output/*_analysis.csv` | Hasil individual per indikator |
 
-## Flow Data
+## Workflow
 
 ```
 [Yahoo Finance]
       ↓
-[Fetch 3 Years Data]
+[Fetch 3 Tahun Data]
       ↓
-[Calculate All Indicators] → MA20, MA50, RSI, MACD, EMA Cross
+[Hitung Indikator: MA20, MA50, RSI, MACD, EMA Cross]
       ↓
 [Save: output/{EMITEN}_past_3_year.csv]
       ↓
-[Generate Summary Report: output/{EMITEN}_summary_report.txt]
-      ↓
-[Generate Timeframe Report: output/{EMITEN}_report_{TIMEFRAME}.csv]
-      ↓
-[Evaluation by Timeframe]
-      ├── Daily: Cek 20 hari terakhir saja
-      ├── Weekly: Cek 12 minggu terakhir saja
-      └── Monthly: Cek 12 bulan terakhir saja
+[Generate Reports]
+      ├── Summary Report (TXT)
+      ├── Timeframe Report (CSV)
+      └── Individual Analysis (CSV)
+```
+
+## Konfigurasi Scoring (Editable)
+
+Semua parameter scoring dapat diubah di `config/scoring_config.py` tanpa mengubah kode utama.
+
+### Konfigurasi yang Tersedia
+
+**1. Time Frames** (`TIME_FRAMES`)
+```python
+'daily': 20,      # 20 hari untuk evaluasi harian
+'weekly': 12,     # 12 minggu untuk evaluasi mingguan
+'monthly': 12,    # 12 bulan untuk evaluasi bulanan
+```
+
+**2. Threshold Scoring** (`*_THRESHOLDS`)
+- `MA_THRESHOLDS` - Threshold untuk MA20/MA50
+- `RSI_THRESHOLDS` - Threshold overbought/oversold RSI
+- `MACD_THRESHOLDS` - Threshold bullish/bearish MACD
+- `EMA_CROSS_THRESHOLDS` - Threshold golden/death cross
+
+**3. Pattern Detection** (`*_CONFIG`)
+- `HAMMER_CONFIG` - Parameter deteksi hammer pattern
+- `SHOOTING_STAR_CONFIG` - Parameter deteksi shooting star
+- `DOJI_CONFIG` - Parameter deteksi doji
+- `MARUBOZU_CONFIG` - Parameter deteksi marubozu
+
+**4. Recommendation Rules** (`RECOMMENDATION_THRESHOLDS`)
+Atur aturan STRONG_BUY, BUY, SELL, STRONG_SELL, HOLD
+
+**5. Signal Weights** (`SIGNAL_*_WEIGHTS`)
+Atur bobot perhitungan sinyal candlestick
+
+### Cara Mengubah Konfigurasi
+
+1. Buka `config/scoring_config.py`
+2. Edit nilai yang diinginkan (contoh: ubah RSI overbought dari 70 ke 75)
+3. Save file
+4. Jalankan ulang analysis - perubahan otomatis diterapkan
+
+### Print Konfigurasi Saat Ini
+
+```bash
+python config/scoring_config.py
 ```
 
 ## Scoring Timeframe
 
-| Timeframe | Periode Evaluasi   | Data Source   | Kegunaan                 |
-| --------- | ------------------ | ------------- | ------------------------ |
-| Daily     | 20 hari terakhir   | 3 tahun penuh | Trading harian           |
-| Weekly    | 12 minggu terakhir | 3 tahun penuh | Swing trading            |
-| Monthly   | 12 bulan terakhir  | 3 tahun penuh | Investasi jangka panjang |
+| Timeframe | Periode Evaluasi | Kegunaan |
+|-----------|-----------------|----------|
+| Daily | 20 hari terakhir | Trading harian |
+| Weekly | 12 minggu terakhir | Swing trading |
+| Monthly | 12 bulan terakhir | Investasi jangka panjang |
 
-**Catatan:** Semua indikator dihitung dari 3 tahun data penuh. Scoring hanya mengevaluasi performa di periode terakhir sesuai timeframe.
+## Candlestick Patterns
 
-## Sinyal Evaluasi
+Patterns yang dideteksi:
+- **Hammer** - Sinyal bullish reversal
+- **Shooting Star** - Sinyal bearish reversal
+- **Bullish/Bearish Engulfing** - Reversal pattern
+- **Doji** - Indecision/konsolidasi
+- **Marubozu** - Trend kuat
 
-Sinyal candlestick yang dideteksi:
+## Signal Strength
 
-- **Hammer** (bullish reversal)
-- **Shooting Star** (bearish reversal)
-- **Bullish/Bearish Engulfing**
-- **Doji** (indecision)
-- **Marubozu** (strong trend)
+```
+STRONG_BULLISH > BULLISH > NEUTRAL > BEARISH > STRONG_BEARISH
+```
 
-Output strength: `STRONG_BULLISH` > `BULLISH` > `NEUTRAL` > `BEARISH` > `STRONG_BEARISH`
+## Disclaimer Penting
+
+**PROYEK INI HANYA UNTUK EDUKASI**
+
+1. **Bukan Financial Advice** - Analisis dan sinyal yang dihasilkan bukan rekomendasi jual/beli
+2. **Risiko Trading** - Trading saham memiliki risiko tinggi. Performa masa lalu tidak menjamin hasil masa depan
+3. **Tanggung Jawab Sendiri** - Selalu lakukan riset sendiri dan konsultasi dengan advisor keuangan berlisensi
+4. **Bukan Jaminan Profit** - Author tidak bertanggung jawab atas kerugian apapun
+
+**Gunakan dengan bijak dan trade at your own risk!**

@@ -1,6 +1,6 @@
 """
 Signal Evaluation Module
-Evaluates candlestick patterns and trend strength.
+Evaluates candlestick patterns and trend strength using configurable parameters.
 Detects: Strong Bullish, Weak Bullish, Neutral, Weak Bearish, Strong Bearish
 """
 
@@ -10,21 +10,56 @@ import sys
 sys.path.append('..')
 from utils import load_stock_data
 
+# Import configuration
+try:
+    from config.scoring_config import (
+        SIGNAL_STRENGTH_WEIGHTS,
+        SIGNAL_COMPONENT_WEIGHTS,
+        HAMMER_CONFIG,
+        SHOOTING_STAR_CONFIG,
+        DOJI_CONFIG,
+        MARUBOZU_CONFIG,
+        ENGULFING_CONFIG,
+        TREND_CONFIG,
+        SENTIMENT_THRESHOLDS,
+        SUMMARY_CONFIG,
+        get_sentiment,
+    )
+except ImportError:
+    # Fallback defaults if config not found
+    SIGNAL_STRENGTH_WEIGHTS = {
+        'STRONG_BULLISH': 2, 'BULLISH': 1, 'NEUTRAL': 0,
+        'BEARISH': -1, 'STRONG_BEARISH': -2
+    }
+    SIGNAL_COMPONENT_WEIGHTS = {
+        'body_positive': 1, 'body_negative': -1,
+        'bullish_pattern': 2, 'bearish_pattern': -2,
+        'uptrend': 1, 'downtrend': -1
+    }
+    HAMMER_CONFIG = {'max_body_ratio': 0.3, 'min_lower_shadow_ratio': 0.6}
+    SHOOTING_STAR_CONFIG = {'max_body_ratio': 0.3, 'min_upper_shadow_ratio': 0.6}
+    DOJI_CONFIG = {'max_body_ratio': 0.1}
+    MARUBOZU_CONFIG = {'min_body_ratio': 0.9}
+    TREND_CONFIG = {'lookback_periods': 5, 'uptrend_threshold': 3, 'downtrend_threshold': -3}
+    SENTIMENT_THRESHOLDS = {'bullish': 1.0, 'bearish': -1.0}
+    SUMMARY_CONFIG = {'recent_signals_count': 5, 'signal_distribution_periods': 20}
+    
+    def get_sentiment(score):
+        if score > 1.0:
+            return 'BULLISH'
+        elif score < -1.0:
+            return 'BEARISH'
+        return 'NEUTRAL'
+
 
 class SignalEvaluator:
     """Evaluate trading signals from candlestick patterns and trends."""
     
-    SIGNAL_STRENGTH = {
-        'STRONG_BULLISH': 2,
-        'BULLISH': 1,
-        'NEUTRAL': 0,
-        'BEARISH': -1,
-        'STRONG_BEARISH': -2
-    }
-    
     def __init__(self, df):
         self.df = df.copy()
         self.signals = []
+        self.cfg_weights = SIGNAL_STRENGTH_WEIGHTS
+        self.cfg_components = SIGNAL_COMPONENT_WEIGHTS
     
     def calculate_body(self, row):
         """Calculate candlestick body size and direction."""
@@ -42,7 +77,8 @@ class SignalEvaluator:
         return upper, lower
     
     def is_hammer(self, row):
-        """Detect hammer pattern (bullish reversal)."""
+        """Detect hammer pattern (bullish reversal) using config thresholds."""
+        cfg = HAMMER_CONFIG
         body = abs(self.calculate_body(row))
         upper, lower = self.calculate_shadows(row)
         total_range = row['High'] - row['Low']
@@ -53,10 +89,16 @@ class SignalEvaluator:
         body_ratio = body / total_range
         lower_ratio = lower / total_range
         
-        return body_ratio < 0.3 and lower_ratio > 0.6 and upper < body
+        # Check if bullish body required
+        if cfg.get('require_bullish_body', True) and row['Close'] <= row['Open']:
+            return False
+        
+        return (body_ratio < cfg['max_body_ratio'] and 
+                lower_ratio > cfg['min_lower_shadow_ratio'])
     
     def is_shooting_star(self, row):
-        """Detect shooting star pattern (bearish reversal)."""
+        """Detect shooting star pattern (bearish reversal) using config thresholds."""
+        cfg = SHOOTING_STAR_CONFIG
         body = abs(self.calculate_body(row))
         upper, lower = self.calculate_shadows(row)
         total_range = row['High'] - row['Low']
@@ -67,7 +109,12 @@ class SignalEvaluator:
         body_ratio = body / total_range
         upper_ratio = upper / total_range
         
-        return body_ratio < 0.3 and upper_ratio > 0.6 and lower < body
+        # Check if bearish body required
+        if cfg.get('require_bearish_body', True) and row['Close'] >= row['Open']:
+            return False
+        
+        return (body_ratio < cfg['max_body_ratio'] and 
+                upper_ratio > cfg['min_upper_shadow_ratio'])
     
     def is_engulfing(self, idx):
         """Detect bullish/bearish engulfing pattern."""
@@ -93,17 +140,19 @@ class SignalEvaluator:
         return None
     
     def is_doji(self, row):
-        """Detect doji pattern (indecision)."""
+        """Detect doji pattern (indecision) using config threshold."""
+        cfg = DOJI_CONFIG
         body = abs(self.calculate_body(row))
         total_range = row['High'] - row['Low']
         
         if total_range == 0:
             return True
         
-        return body / total_range < 0.1
+        return body / total_range < cfg['max_body_ratio']
     
     def is_marubozu(self, row):
-        """Detect marubozu pattern (strong trend)."""
+        """Detect marubozu pattern (strong trend) using config thresholds."""
+        cfg = MARUBOZU_CONFIG
         body = abs(self.calculate_body(row))
         upper, lower = self.calculate_shadows(row)
         total_range = row['High'] - row['Low']
@@ -111,7 +160,13 @@ class SignalEvaluator:
         if total_range == 0:
             return None
         
-        if body / total_range > 0.9:
+        shadow_size = upper + lower
+        shadow_ratio = shadow_size / total_range if total_range > 0 else 0
+        body_ratio = body / total_range
+        
+        max_shadow = cfg.get('max_shadow_ratio', 0.1)
+        
+        if body_ratio > cfg['min_body_ratio'] and shadow_ratio < max_shadow:
             if row['Close'] > row['Open']:
                 return 'BULLISH_MARUBOZU'
             else:
@@ -119,10 +174,15 @@ class SignalEvaluator:
         
         return None
     
-    def analyze_trend(self, periods=5):
-        """Analyze short-term trend direction."""
+    def analyze_trend(self):
+        """Analyze short-term trend direction using config parameters."""
+        cfg = TREND_CONFIG
         df = self.df
         df['Trend'] = 'NEUTRAL'
+        
+        periods = cfg['lookback_periods']
+        up_thresh = cfg['uptrend_threshold']
+        down_thresh = cfg['downtrend_threshold']
         
         for i in range(periods, len(df)):
             window = df.iloc[i-periods:i]
@@ -131,15 +191,15 @@ class SignalEvaluator:
             
             change_pct = (end_price - start_price) / start_price * 100
             
-            if change_pct > 3:
+            if change_pct > up_thresh:
                 df.iloc[i, df.columns.get_loc('Trend')] = 'UPTREND'
-            elif change_pct < -3:
+            elif change_pct < down_thresh:
                 df.iloc[i, df.columns.get_loc('Trend')] = 'DOWNTREND'
         
         return df
     
     def evaluate_single_candle(self, idx):
-        """Evaluate signal for a single candle."""
+        """Evaluate signal for a single candle using config weights."""
         row = self.df.iloc[idx]
         
         body = self.calculate_body(row)
@@ -178,30 +238,34 @@ class SignalEvaluator:
         }
     
     def _determine_signal(self, body, patterns, trend):
-        """Determine final signal strength."""
+        """Determine final signal strength using configurable weights."""
+        w = self.cfg_components
         score = 0
         
         # Body contribution
         if body > 0:
-            score += 1
+            score += w['body_positive']
         elif body < 0:
-            score -= 1
+            score += w['body_negative']
         
         # Pattern contribution
-        if 'BULLISH_ENGULFING' in patterns or 'BULLISH_MARUBOZU' in patterns or 'HAMMER' in patterns:
-            score += 2
-        if 'BEARISH_ENGULFING' in patterns or 'BEARISH_MARUBOZU' in patterns or 'SHOOTING_STAR' in patterns:
-            score -= 2
+        bullish_patterns = ['BULLISH_ENGULFING', 'BULLISH_MARUBOZU', 'HAMMER']
+        bearish_patterns = ['BEARISH_ENGULFING', 'BEARISH_MARUBOZU', 'SHOOTING_STAR']
+        
+        if any(p in patterns for p in bullish_patterns):
+            score += w['bullish_pattern']
+        if any(p in patterns for p in bearish_patterns):
+            score += w['bearish_pattern']
         if 'DOJI' in patterns:
             score = 0
         
         # Trend contribution
         if trend == 'UPTREND':
-            score += 1
+            score += w['uptrend']
         elif trend == 'DOWNTREND':
-            score -= 1
+            score += w['downtrend']
         
-        # Map score to signal
+        # Map score to signal (using thresholds that can be made configurable)
         if score >= 3:
             return 'STRONG_BULLISH'
         elif score >= 1:
@@ -223,16 +287,16 @@ class SignalEvaluator:
         
         return self
     
-    def get_summary(self, last_n=20):
-        """Get summary of recent signals."""
+    def get_summary(self, last_n=None):
+        """Get summary of recent signals using config."""
+        if last_n is None:
+            last_n = SUMMARY_CONFIG.get('signal_distribution_periods', 20)
+        
         recent = self.signals[-last_n:]
         
         counts = {
-            'STRONG_BULLISH': 0,
-            'BULLISH': 0,
-            'NEUTRAL': 0,
-            'BEARISH': 0,
-            'STRONG_BEARISH': 0
+            'STRONG_BULLISH': 0, 'BULLISH': 0, 'NEUTRAL': 0,
+            'BEARISH': 0, 'STRONG_BEARISH': 0
         }
         
         for sig in recent:
@@ -240,26 +304,23 @@ class SignalEvaluator:
         
         # Calculate weighted score
         total_score = sum(
-            self.SIGNAL_STRENGTH[sig['signal']] 
+            self.cfg_weights[sig['signal']] 
             for sig in recent
         )
         
         avg_score = total_score / len(recent) if recent else 0
         
-        # Determine overall sentiment
-        if avg_score > 1:
-            sentiment = 'BULLISH'
-        elif avg_score < -1:
-            sentiment = 'BEARISH'
-        else:
-            sentiment = 'NEUTRAL'
+        # Use config to determine sentiment
+        sentiment = get_sentiment(avg_score)
+        
+        recent_count = SUMMARY_CONFIG.get('recent_signals_count', 5)
         
         return {
             'periods_analyzed': last_n,
             'signal_counts': counts,
             'weighted_score': round(avg_score, 2),
             'overall_sentiment': sentiment,
-            'recent_signals': recent[-5:]
+            'recent_signals': recent[-recent_count:]
         }
     
     def print_report(self):
@@ -279,7 +340,7 @@ class SignalEvaluator:
         print(f"\nWeighted Score: {summary['weighted_score']}")
         print(f"Overall Sentiment: {summary['overall_sentiment']}")
         
-        print("\nRecent Signals (Last 5):")
+        print("\nRecent Signals (Last {}):".format(len(summary['recent_signals'])))
         for sig in summary['recent_signals']:
             patterns = ", ".join(sig['patterns']) if sig['patterns'] else "None"
             print(f"  {sig['date'].date()} | {sig['signal']:16} | Patterns: {patterns}")

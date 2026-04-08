@@ -1,9 +1,6 @@
 """
 Evaluation Scoring Module
-Evaluates technical indicators based on timeframe:
-- Daily: Last 4 weeks (20 trading days)
-- Weekly: Last 3 months (~12 weeks)
-- Monthly: Last 1 year (12 months)
+Evaluates technical indicators based on timeframe using configurable parameters.
 """
 
 import pandas as pd
@@ -11,15 +8,42 @@ import sys
 sys.path.append('..')
 from utils import load_stock_data
 
+# Import configuration
+try:
+    from config.scoring_config import (
+        TIME_FRAMES,
+        MA_THRESHOLDS,
+        RSI_THRESHOLDS,
+        MACD_THRESHOLDS,
+        EMA_CROSS_THRESHOLDS,
+        get_timeframe_period,
+        get_recommendation,
+    )
+except ImportError:
+    # Fallback defaults if config not found
+    TIME_FRAMES = {'daily': 20, 'weekly': 12, 'monthly': 12}
+    MA_THRESHOLDS = {'bullish': 60, 'bearish': 40}
+    RSI_THRESHOLDS = {'overbought': 70, 'oversold': 30, 'bullish_min': 55, 'bearish_max': 45}
+    MACD_THRESHOLDS = {'bullish': 60, 'bearish': 40}
+    EMA_CROSS_THRESHOLDS = {'bullish': 60, 'bearish': 40}
+    
+    def get_timeframe_period(tf):
+        return TIME_FRAMES.get(tf, 20)
+    
+    def get_recommendation(score, bullish, total, dirs):
+        if score >= 70 and bullish >= total * 0.6:
+            return 'STRONG_BUY'
+        elif score >= 55:
+            return 'BUY'
+        elif score <= 30 and (total - bullish) >= total * 0.6:
+            return 'STRONG_SELL'
+        elif score <= 45:
+            return 'SELL'
+        return 'HOLD'
+
 
 class TechnicalScorer:
     """Score technical indicators based on historical performance."""
-    
-    TIMEFRAMES = {
-        'daily': 20,      # 4 weeks
-        'weekly': 12,     # 3 months
-        'monthly': 12     # 1 year
-    }
     
     def __init__(self, df):
         self.df = df.copy()
@@ -27,10 +51,7 @@ class TechnicalScorer:
     
     def set_period(self, timeframe='daily'):
         """Set evaluation period based on timeframe."""
-        if timeframe not in self.TIMEFRAMES:
-            raise ValueError(f"Invalid timeframe. Choose from: {list(self.TIMEFRAMES.keys())}")
-        
-        periods = self.TIMEFRAMES[timeframe]
+        periods = get_timeframe_period(timeframe)
         self.eval_df = self.df.tail(periods).copy()
         print(f"\nEvaluation Period: {timeframe.upper()} (last {periods} periods)")
         return self
@@ -48,7 +69,14 @@ class TechnicalScorer:
         else:
             score = (above_ma / total) * 100
         
-        direction = 'Bullish' if score > 60 else 'Bearish' if score < 40 else 'Neutral'
+        # Use config thresholds
+        th = MA_THRESHOLDS
+        if score > th['bullish']:
+            direction = 'Bullish'
+        elif score < th['bearish']:
+            direction = 'Bearish'
+        else:
+            direction = 'Neutral'
         
         self.scores[ma_col] = {
             'score': round(score, 2),
@@ -72,13 +100,15 @@ class TechnicalScorer:
             avg_rsi = rsi.mean()
             score = avg_rsi
         
-        if avg_rsi > 70:
+        # Use config thresholds
+        th = RSI_THRESHOLDS
+        if avg_rsi > th['overbought']:
             direction = 'Overbought'
-        elif avg_rsi < 30:
+        elif avg_rsi < th['oversold']:
             direction = 'Oversold'
-        elif avg_rsi > 55:
+        elif avg_rsi > th['bullish_min']:
             direction = 'Bullish'
-        elif avg_rsi < 45:
+        elif avg_rsi < th['bearish_max']:
             direction = 'Bearish'
         else:
             direction = 'Neutral'
@@ -106,7 +136,14 @@ class TechnicalScorer:
         else:
             score = (bullish / total) * 100
         
-        direction = 'Bullish' if score > 60 else 'Bearish' if score < 40 else 'Neutral'
+        # Use config thresholds
+        th = MACD_THRESHOLDS
+        if score > th['bullish']:
+            direction = 'Bullish'
+        elif score < th['bearish']:
+            direction = 'Bearish'
+        else:
+            direction = 'Neutral'
         
         self.scores['MACD'] = {
             'score': round(score, 2),
@@ -128,7 +165,14 @@ class TechnicalScorer:
             golden = (diff > 0).sum()
             score = (golden / len(diff)) * 100
         
-        direction = 'Bullish' if score > 60 else 'Bearish' if score < 40 else 'Neutral'
+        # Use config thresholds
+        th = EMA_CROSS_THRESHOLDS
+        if score > th['bullish']:
+            direction = 'Bullish'
+        elif score < th['bearish']:
+            direction = 'Bearish'
+        else:
+            direction = 'Neutral'
         
         self.scores['EMA_Cross'] = {
             'score': round(score, 2),
@@ -147,23 +191,14 @@ class TechnicalScorer:
         return round(total_score / len(self.scores), 2)
     
     def get_recommendation(self):
-        """Get trading recommendation based on scores."""
+        """Get trading recommendation based on scores using config."""
         overall = self.get_overall_score()
         
         directions = [s['direction'] for s in self.scores.values()]
         bullish_count = directions.count('Bullish') + directions.count('Overbought')
-        bearish_count = directions.count('Bearish') + directions.count('Oversold')
+        total = len(directions)
         
-        if overall >= 70 and bullish_count >= len(directions) * 0.6:
-            return 'STRONG_BUY'
-        elif overall >= 55:
-            return 'BUY'
-        elif overall <= 30 and bearish_count >= len(directions) * 0.6:
-            return 'STRONG_SELL'
-        elif overall <= 45:
-            return 'SELL'
-        else:
-            return 'HOLD'
+        return get_recommendation(overall, bullish_count, total, directions)
     
     def print_report(self):
         """Print evaluation report."""
