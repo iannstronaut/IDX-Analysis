@@ -4,6 +4,24 @@
 
 Technical analysis tool untuk saham Indonesia Stock Exchange (IDX) menggunakan data dari Yahoo Finance.
 
+## Daftar Isi
+
+- [Fitur](#fitur)
+- [Struktur Project](#struktur-project)
+- [Instalasi](#instalasi)
+- [Cara Penggunaan](#cara-penggunaan)
+  - [Opsi 1: CLI (Recommended)](#opsi-1-cli-recommended-untuk-pengguna)
+  - [Opsi 2: Main.py (Simple)](#opsi-2-mainpy-simple)
+  - [Opsi 3: Step-by-Step (Advanced)](#opsi-3-step-by-step-advanceddeveloper)
+- [Output Files](#output-files)
+- [Workflow](#workflow)
+- [Konfigurasi Scoring (Editable)](#konfigurasi-scoring-editable)
+- [Scoring Timeframe](#scoring-timeframe)
+- [Candlestick Patterns](#candlestick-patterns)
+- [Signal Strength](#signal-strength)
+- [Disclaimer Penting](#disclaimer-penting)
+- [Thanks To](#thanks-to)
+
 ## Fitur
 
 - **Data Fetching:** Ambil data historis 3 tahun dari Yahoo Finance
@@ -222,5 +240,20 @@ STRONG_BULLISH > BULLISH > NEUTRAL > BEARISH > STRONG_BEARISH
 2. **Risiko Trading** - Trading saham memiliki risiko tinggi. Performa masa lalu tidak menjamin hasil masa depan
 3. **Tanggung Jawab Sendiri** - Selalu lakukan riset sendiri dan konsultasi dengan advisor keuangan berlisensi
 4. **Bukan Jaminan Profit** - Author tidak bertanggung jawab atas kerugian apapun
+5. **Yahoo Finance Terms of Service** - Aplikasi ini menggunakan library yfinance. Pengguna diharapkan mematuhi Terms of Service Yahoo Finance. Pengembang tidak bertanggung jawab atas penggunaan data di luar tujuan edukasi
 
 **Gunakan dengan bijak dan trade at your own risk!**
+
+---
+
+## Thanks To
+
+Project ini menggunakan library open-source berikut:
+
+| Library | Deskripsi | Link |
+|---------|-----------|------|
+| **yfinance** | Fetch data saham dari Yahoo Finance | [github.com/ranaroussi/yfinance](https://github.com/ranaroussi/yfinance) |
+| **pandas** | Data manipulation and analysis | [pandas.pydata.org](https://pandas.pydata.org/) |
+| **numpy** | Numerical computing | [numpy.org](https://numpy.org/) |
+
+Terima kasih kepada semua kontributor library di atas yang telah membuat project ini mungkin!
