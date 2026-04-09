@@ -6,11 +6,20 @@ Edit file ini untuk mengubah parameter scoring tanpa mengubah kode utama.
 
 Panduan Penggunaan:
 - TIME_FRAMES: Atur periode evaluasi untuk masing-masing timeframe
+- INDICATOR_WEIGHTS: Atur bobot untuk masing-masing indikator (MA20, MA50, RSI, MACD, EMA_Cross)
 - SCORE_THRESHOLDS: Atur batas nilai untuk kategori bullish/bearish
 - SIGNAL_WEIGHTS: Atur bobot untuk masing-masing sinyal
 - RECOMMENDATION_RULES: Atur aturan rekomendasi buy/sell/hold
 - PATTERN_THRESHOLDS: Atur threshold deteksi candlestick patterns
 - TREND_SETTINGS: Atur parameter analisis trend
+
+Contoh Konfigurasi Bobot Indikator:
+- MA20: 1.0       → Bobot normal
+- MA50: 1.2       → 20% lebih penting dari MA20
+- RSI: 1.0        → Bobot normal
+- MACD: 1.5       → 50% lebih penting (prioritas momentum)
+- EMA_Cross: 1.3  → 30% lebih penting (trend following)
+Total bobot akan dinormalisasi otomatis (total = 100%)
 """
 
 # =============================================================================
@@ -56,7 +65,22 @@ EMA_CROSS_THRESHOLDS = {
 }
 
 # =============================================================================
-# 3. SIGNAL WEIGHTS
+# 3. INDICATOR WEIGHTS (Scoring)
+# =============================================================================
+# Atur bobot untuk masing-masing indikator dalam perhitungan overall score
+# Format: 'indicator_name': bobot (1.0 = normal, 0.5 = setengah bobot, 2.0 = 2x bobot)
+# Total bobot akan dinormalisasi otomatis
+
+INDICATOR_WEIGHTS = {
+    'MA20': 1.0,       # Moving Average 20 - bobot default
+    'MA50': 1.2,       # Moving Average 50 - sedikit lebih tinggi (trend jangka menengah)
+    'RSI': 1.0,        # RSI - bobot default
+    'MACD': 1.5,       # MACD - lebih tinggi (momentum indicator)
+    'EMA_Cross': 1.3,  # EMA Cross - sedikit lebih tinggi (trend following)
+}
+
+# =============================================================================
+# 4. SIGNAL WEIGHTS
 # =============================================================================
 # Atur bobot untuk perhitungan sinyal keseluruhan
 # Format: 'signal_name': bobot
@@ -80,7 +104,7 @@ SIGNAL_COMPONENT_WEIGHTS = {
 }
 
 # =============================================================================
-# 4. RECOMMENDATION RULES
+# 5. RECOMMENDATION RULES
 # =============================================================================
 # Atur aturan untuk rekomendasi trading
 
@@ -105,7 +129,7 @@ RECOMMENDATION_THRESHOLDS = {
 }
 
 # =============================================================================
-# 5. CANDLESTICK PATTERN THRESHOLDS
+# 6. CANDLESTICK PATTERN THRESHOLDS
 # =============================================================================
 # Atur parameter deteksi candlestick patterns
 
@@ -137,7 +161,7 @@ ENGULFING_CONFIG = {
 }
 
 # =============================================================================
-# 6. TREND ANALYSIS SETTINGS
+# 7. TREND ANALYSIS SETTINGS
 # =============================================================================
 # Atur parameter analisis trend
 
@@ -148,7 +172,7 @@ TREND_CONFIG = {
 }
 
 # =============================================================================
-# 7. EVALUATION SUMMARY SETTINGS
+# 8. EVALUATION SUMMARY SETTINGS
 # =============================================================================
 # Atur parameter untuk summary report
 
@@ -158,13 +182,15 @@ SUMMARY_CONFIG = {
 }
 
 # =============================================================================
-# 8. SENTIMENT THRESHOLDS
+# 9. SENTIMENT THRESHOLDS
 # =============================================================================
 # Atur batas untuk penentuan sentiment keseluruhan
 
 SENTIMENT_THRESHOLDS = {
-    'bullish': 1.0,      # Weighted score > 1 = BULLISH
-    'bearish': -1.0,     # Weighted score < -1 = BEARISH
+    'strong_bullish': 0.5,   # Weighted score >= 0.5 = STRONG_BULLISH
+    'bullish': 0.2,        # Weighted score >= 0.2 = BULLISH
+    'bearish': -0.2,       # Weighted score <= -0.2 = BEARISH
+    'strong_bearish': -0.5,# Weighted score <= -0.5 = STRONG_BEARISH
 }
 
 # =============================================================================
@@ -224,12 +250,56 @@ def get_recommendation(score, bullish_count, total_indicators, directions):
 
 
 def get_sentiment(weighted_score):
-    """Get sentiment based on weighted score."""
-    if weighted_score > SENTIMENT_THRESHOLDS['bullish']:
+    """
+    Get sentiment based on weighted score.
+
+    Threshold:
+    - weighted_score >= 0.5  → STRONG_BULLISH
+    - weighted_score >= 0.2  → BULLISH
+    - weighted_score <= -0.5 → STRONG_BEARISH
+    - weighted_score <= -0.2 → BEARISH
+    - else                   → NEUTRAL
+    """
+    th = SENTIMENT_THRESHOLDS
+
+    if weighted_score >= th['strong_bullish']:
+        return 'STRONG_BULLISH'
+    elif weighted_score >= th['bullish']:
         return 'BULLISH'
-    elif weighted_score < SENTIMENT_THRESHOLDS['bearish']:
+    elif weighted_score <= th['strong_bearish']:
+        return 'STRONG_BEARISH'
+    elif weighted_score <= th['bearish']:
         return 'BEARISH'
+
     return 'NEUTRAL'
+
+
+def get_indicator_weights():
+    """
+    Get normalized indicator weights (sum to 1.0).
+    Returns a dict with normalized weights for each indicator.
+    """
+    total_weight = sum(INDICATOR_WEIGHTS.values())
+    if total_weight == 0:
+        return {k: 1.0 / len(INDICATOR_WEIGHTS) for k in INDICATOR_WEIGHTS}
+    return {k: v / total_weight for k, v in INDICATOR_WEIGHTS.items()}
+
+
+def get_indicator_weight(indicator_name):
+    """
+    Get normalized weight for a specific indicator.
+
+    Parameters:
+    -----------
+    indicator_name : str
+        Name of the indicator (e.g., 'MA20', 'RSI', 'MACD')
+
+    Returns:
+    --------
+    float : Normalized weight (0.0 to 1.0)
+    """
+    weights = get_indicator_weights()
+    return weights.get(indicator_name, 1.0 / len(INDICATOR_WEIGHTS))
 
 
 def print_config_summary():
@@ -237,20 +307,26 @@ def print_config_summary():
     print("=" * 60)
     print("SCORING CONFIGURATION SUMMARY")
     print("=" * 60)
-    
+
     print("\n1. Time Frames:")
     for tf, period in TIME_FRAMES.items():
         print(f"   {tf}: {period} periods")
-    
-    print("\n2. Recommendation Thresholds:")
+
+    print("\n2. Indicator Weights:")
+    normalized = get_indicator_weights()
+    for ind, raw in INDICATOR_WEIGHTS.items():
+        norm = normalized.get(ind, 0)
+        print(f"   {ind}: {raw:.1f} (normalized: {norm:.2%})")
+
+    print("\n3. Recommendation Thresholds:")
     for rec, rules in RECOMMENDATION_THRESHOLDS.items():
         if rules:
             print(f"   {rec}: {rules}")
-    
-    print("\n3. Pattern Detection Thresholds:")
+
+    print("\n4. Pattern Detection Thresholds:")
     print(f"   Hammer max body ratio: {HAMMER_CONFIG['max_body_ratio']}")
     print(f"   Doji max body ratio: {DOJI_CONFIG['max_body_ratio']}")
-    
+
     print("\n" + "=" * 60)
 
 

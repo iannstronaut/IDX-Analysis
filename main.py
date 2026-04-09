@@ -12,26 +12,51 @@ import pandas as pd
 from pathlib import Path
 
 
-def run_pipeline(emiten='BBCA', timeframe='daily'):
+def run_pipeline(emiten='BBCA', timeframe='daily', start=None, end=None, generate_chart=False):
     """
     Run complete analysis pipeline.
-    
+
     Flow:
-    1. Fetch 3 years data + calculate all indicators
+    1. Fetch data by date range or 3 years + calculate all indicators
     2. Save to data/{emiten}_past_3_year.csv
     3. Evaluate scoring based on timeframe (last N periods)
     4. Signal evaluation (candlestick patterns)
     5. Generate summary report (overall + timeframe filtered data)
+    6. Optionally generate chart
+
+    Parameters:
+    -----------
+    emiten : str
+        Stock ticker (default: BBCA)
+    timeframe : str
+        Evaluation timeframe (daily/weekly/monthly)
+    start : str, optional
+        Start date (format: YYYY-MM-DD or DD-MM-YYYY)
+    end : str, optional
+        End date (format: YYYY-MM-DD or DD-MM-YYYY)
+    generate_chart : bool
+        Whether to generate chart image (default: False)
     """
     print("=" * 60)
-    print(f"{emiten}.JK TECHNICAL ANALYSIS PIPELINE")
+
+    # Determine date range description
+    if start or end:
+        range_str = f"{start or 'start'} to {end or 'now'}"
+        print(f"{emiten}.JK TECHNICAL ANALYSIS PIPELINE ({range_str})")
+    else:
+        print(f"{emiten}.JK TECHNICAL ANALYSIS PIPELINE")
+
     print("=" * 60)
-    
+
     # 1. Fetch Data + Add Indicators
-    print(f"\n[1/4] Fetching 3 Years Data + Calculating Indicators...")
+    if start or end:
+        print(f"\n[1/4] Fetching Data ({range_str}) + Calculating Indicators...")
+    else:
+        print(f"\n[1/4] Fetching 3 Years Data + Calculating Indicators...")
+
     from data.add_indicators import process_and_save
-    
-    df = process_and_save(emiten=emiten, interval="1d")
+
+    df = process_and_save(emiten=emiten, interval="1d", start=start, end=end)
     
     print(f"\nData saved with all indicators to: output/{emiten}_past_3_year.csv")
     print(f"Total rows: {len(df)} ({df['Date'].min().date()} to {df['Date'].max().date()})")
@@ -59,15 +84,28 @@ def run_pipeline(emiten='BBCA', timeframe='daily'):
     # 3. Run Signal Evaluation
     print("\n[3/4] Running Signal Evaluation...")
     from evaluation.signal_eval import SignalEvaluator
-    
+
     evaluator = SignalEvaluator(df)
     evaluator.evaluate_all()
     evaluator.print_report()
-    
+
     # 4. Generate Summary Report
     print("\n[4/4] Generating Summary Report...")
     generate_summary_report(df, scorer, evaluator, emiten, timeframe)
-    
+
+    # 5. Generate Chart (optional)
+    chart_path = None
+    if generate_chart:
+        print("\n[5/5] Generating Chart...")
+        from chart import generate_chart
+        chart_path = generate_chart(
+            df,
+            emiten=emiten,
+            timeframe=timeframe,
+            start=start,
+            end=end
+        )
+
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETED SUCCESSFULLY!")
     print("=" * 60)
@@ -75,6 +113,8 @@ def run_pipeline(emiten='BBCA', timeframe='daily'):
     print(f"  - output/{emiten}_past_3_year.csv (3Y data + all indicators)")
     print(f"  - output/{emiten}_summary_report.txt (overall analysis)")
     print(f"  - output/{emiten}_report_{timeframe}.csv (filtered data for {timeframe})")
+    if chart_path:
+        print(f"  - {chart_path}")
 
 
 def generate_summary_report(df, scorer, evaluator, emiten, timeframe):
@@ -82,13 +122,14 @@ def generate_summary_report(df, scorer, evaluator, emiten, timeframe):
     summary = evaluator.get_summary()
     overall_score = scorer.get_overall_score()
     recommendation = scorer.get_recommendation()
-    
+    weighted_scores = scorer.get_weighted_scores()
+
     # Get evaluation period info
     period_map = {'daily': 20, 'weekly': 12, 'monthly': 12}
     period_labels = {'daily': '20 days', 'weekly': '12 weeks', 'monthly': '12 months'}
     eval_period_count = period_map.get(timeframe, 20)
     eval_period_label = period_labels.get(timeframe, '20 days')
-    
+
     latest = df.iloc[-1]
     
     # === 1. TEXT REPORT (Overall Analysis) ===
@@ -124,24 +165,25 @@ EMA12:    {latest.get('EMA12', 'N/A'):,.2f}
 EMA26:    {latest.get('EMA26', 'N/A'):,.2f}
 
 -----------------------------------------------------------------
-                        SCORING SUMMARY
+                         SCORING SUMMARY
 -----------------------------------------------------------------
 Evaluation Period: {timeframe.upper()} (Last {eval_period_label})
-Overall Score: {overall_score}/100
+Overall Score (Weighted): {overall_score}/100
 Recommendation: {recommendation}
 
-Individual Scores:
+Individual Scores (with Weights):
 """
-    
-    for name, data in scorer.scores.items():
-        text_report += f"  {name}: {data['score']:.2f} ({data['direction']})\n"
+
+    for name, data in weighted_scores.items():
+        text_report += f"  {name}: {data['score']:.2f} ({data['direction']}) | Weight: {data['weight']:.0%}\n"
     
     text_report += f"""
 -----------------------------------------------------------------
                        SIGNAL EVALUATION
 -----------------------------------------------------------------
 Overall Sentiment: {summary['overall_sentiment']}
-Weighted Score: {summary['weighted_score']}
+Normalized Score: {summary['weighted_score']:.2f} (range: -1.0 to +1.0)
+Raw Score: {summary.get('raw_score', 'N/A'):.2f}
 
 Signal Distribution (Last {eval_period_label}):
 """
@@ -177,12 +219,34 @@ Not financial advice. Trade at your own risk.
 
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(description='BBCA.JK Technical Analysis')
+
+    parser = argparse.ArgumentParser(
+        description='IDX Technical Analysis',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py                          # Analisis default (BBCA, daily, 3 tahun)
+  python main.py --emiten BBRI            # Ganti emiten
+  python main.py --start 2025-01-01 --end 2025-12-31  # Range tanggal
+  python main.py --start 01-01-2025 --end 31-12-2025  # Format DD-MM-YYYY
+  python main.py --timeframe weekly       # Timeframe mingguan
+  python main.py --chart                  # Generate chart dengan analisis
+        """
+    )
+
     parser.add_argument('--emiten', default='BBCA', help='Stock ticker (default: BBCA)')
     parser.add_argument('--timeframe', choices=['daily', 'weekly', 'monthly'],
                        default='daily', help='Evaluation timeframe (daily=20 days, weekly=12 weeks, monthly=12 months)')
-    
+    parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    parser.add_argument('--chart', action='store_true', help='Generate chart with indicators')
+
     args = parser.parse_args()
-    
-    run_pipeline(emiten=args.emiten, timeframe=args.timeframe)
+
+    run_pipeline(
+        emiten=args.emiten,
+        timeframe=args.timeframe,
+        start=args.start,
+        end=args.end,
+        generate_chart=args.chart
+    )

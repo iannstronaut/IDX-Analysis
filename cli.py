@@ -66,12 +66,23 @@ def print_warning(msg):
 def cmd_fetch(args):
     """Command: Fetch data from Yahoo Finance."""
     print_header()
-    print_info(f"Fetching data for {args.emiten}.JK...")
-    
+
+    # Display date range info if provided
+    if args.start or args.end:
+        range_str = f"{args.start or 'start'} to {args.end or 'now'}"
+        print_info(f"Fetching data for {args.emiten}.JK ({range_str})...")
+    else:
+        print_info(f"Fetching data for {args.emiten}.JK...")
+
     from data.add_indicators import process_and_save
-    
+
     try:
-        df = process_and_save(emiten=args.emiten, interval=args.interval)
+        df = process_and_save(
+            emiten=args.emiten,
+            interval=args.interval,
+            start=args.start,
+            end=args.end
+        )
         print_success(f"Data saved to output/{args.emiten}_past_3_year.csv")
         print(f"\n  Total rows: {len(df)}")
         print(f"  Date range: {df['Date'].min().date()} to {df['Date'].max().date()}")
@@ -79,23 +90,34 @@ def cmd_fetch(args):
     except Exception as e:
         print_error(f"Failed to fetch data: {e}")
         return 1
-    
+
     return 0
 
 
 def cmd_analyze(args):
     """Command: Run complete analysis."""
     print_header()
-    print_info(f"Running analysis for {args.emiten}.JK ({args.timeframe})...")
-    
+
+    # Display date range info if provided
+    if args.start or args.end:
+        range_str = f"{args.start or 'start'} to {args.end or 'now'}"
+        print_info(f"Running analysis for {args.emiten}.JK ({args.timeframe}, {range_str})...")
+    else:
+        print_info(f"Running analysis for {args.emiten}.JK ({args.timeframe})...")
+
     from data.add_indicators import process_and_save
     from evaluation.scoring import TechnicalScorer
     from evaluation.signal_eval import SignalEvaluator
-    
+
     try:
         # Step 1: Fetch & add indicators
         print("\n[Step 1/3] Fetching data and calculating indicators...")
-        df = process_and_save(emiten=args.emiten, interval="1d")
+        df = process_and_save(
+            emiten=args.emiten,
+            interval="1d",
+            start=args.start,
+            end=args.end
+        )
         
         # Step 2: Scoring
         print(f"\n[Step 2/3] Running scoring evaluation ({args.timeframe})...")
@@ -117,10 +139,23 @@ def cmd_analyze(args):
         print("\n[Step 3/3] Running signal evaluation...")
         evaluator = SignalEvaluator(df)
         evaluator.evaluate_all()
-        
+
+        # Step 4: Generate chart (if requested)
+        if args.chart:
+            print("\n[Step 4/4] Generating chart...")
+            from chart import generate_chart
+            chart_path = generate_chart(
+                df,
+                emiten=args.emiten,
+                timeframe=args.timeframe,
+                start=args.start,
+                end=args.end
+            )
+            print_success(f"Chart saved to: {chart_path}")
+
         # Generate reports
         generate_reports(df, scorer, evaluator, args.emiten, args.timeframe)
-        
+
         # Print summary
         print("\n" + "="*60)
         print("ANALYSIS COMPLETE!")
@@ -129,6 +164,8 @@ def cmd_analyze(args):
         print(f"Recommendation: {scorer.get_recommendation()}")
         print(f"Signal Sentiment: {evaluator.get_summary()['overall_sentiment']}")
         print(f"\nOutput files in output/ directory")
+        if args.chart:
+            print(f"  - {chart_path}")
         
     except Exception as e:
         print_error(f"Analysis failed: {e}")
@@ -140,12 +177,23 @@ def cmd_analyze(args):
 def cmd_score(args):
     """Command: Run scoring evaluation only."""
     print_header()
-    print_info(f"Running scoring for {args.emiten}.JK ({args.timeframe})...")
-    
+
+    # Display date range info if provided
+    if args.start or args.end:
+        range_str = f"{args.start or 'start'} to {args.end or 'now'}"
+        print_info(f"Running scoring for {args.emiten}.JK ({args.timeframe}, {range_str})...")
+    else:
+        print_info(f"Running scoring for {args.emiten}.JK ({args.timeframe})...")
+
     from evaluation.scoring import run_evaluation
-    
+
     try:
-        scorer = run_evaluation(emiten=args.emiten, timeframe=args.timeframe)
+        scorer = run_evaluation(
+            emiten=args.emiten,
+            timeframe=args.timeframe,
+            start=args.start,
+            end=args.end
+        )
         print_success(f"Scoring complete! Overall: {scorer.get_overall_score()}/100")
     except Exception as e:
         print_error(f"Scoring failed: {e}")
@@ -175,7 +223,7 @@ def cmd_signal(args):
 def cmd_config(args):
     """Command: View or modify configuration."""
     print_header()
-    
+
     if args.action == 'view':
         print_info("Current configuration:")
         try:
@@ -184,7 +232,7 @@ def cmd_config(args):
         except Exception as e:
             print_error(f"Could not load config: {e}")
             return 1
-    
+
     elif args.action == 'edit':
         print_info("Opening config file...")
         config_path = Path('config/scoring_config.py')
@@ -193,11 +241,45 @@ def cmd_config(args):
             print("\nKey sections to edit:")
             print("  - TIME_FRAMES: Change evaluation periods")
             print("  - RSI_THRESHOLDS: Change RSI levels")
+            print("  - INDICATOR_WEIGHTS: Change indicator weights for scoring")
             print("  - *_CONFIG: Change pattern detection parameters")
         else:
             print_error("Config file not found!")
             return 1
-    
+
+    return 0
+
+
+def cmd_chart(args):
+    """Command: Generate stock chart with indicators."""
+    print_header()
+
+    # Display date range info if provided
+    if args.start or args.end:
+        range_str = f"{args.start or 'start'} to {args.end or 'now'}"
+        print_info(f"Generating chart for {args.emiten}.JK ({range_str})...")
+    else:
+        print_info(f"Generating chart for {args.emiten}.JK...")
+
+    from chart import generate_chart_from_file
+
+    try:
+        output_path = generate_chart_from_file(
+            filepath=args.file,
+            emiten=args.emiten,
+            output_path=args.output,
+            start=args.start,
+            end=args.end,
+            timeframe=args.timeframe
+        )
+        print_success(f"Chart generated successfully!")
+        print(f"\n  Saved to: {output_path}")
+    except Exception as e:
+        print_error(f"Chart generation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
     return 0
 
 
@@ -295,11 +377,12 @@ def cmd_interactive(args):
 def generate_reports(df, scorer, evaluator, emiten, timeframe):
     """Generate summary and timeframe reports."""
     import pandas as pd
-    
+
     summary = evaluator.get_summary()
     overall_score = scorer.get_overall_score()
     recommendation = scorer.get_recommendation()
-    
+    weighted_scores = scorer.get_weighted_scores()
+
     # Get config for period info
     try:
         from config.scoring_config import TIME_FRAMES
@@ -342,24 +425,25 @@ EMA12:    {latest.get('EMA12', 'N/A'):,.2f}
 EMA26:    {latest.get('EMA26', 'N/A'):,.2f}
 
 -----------------------------------------------------------------
-                        SCORING SUMMARY
+                         SCORING SUMMARY
 -----------------------------------------------------------------
 Evaluation Period: {timeframe.upper()} (Last {eval_period} periods)
-Overall Score: {overall_score}/100
+Overall Score (Weighted): {overall_score}/100
 Recommendation: {recommendation}
 
-Individual Scores:
+Individual Scores (with Weights):
 """
-    
-    for name, data in scorer.scores.items():
-        text_report += f"  {name}: {data['score']:.2f} ({data['direction']})\n"
+
+    for name, data in weighted_scores.items():
+        text_report += f"  {name}: {data['score']:.2f} ({data['direction']}) | Weight: {data['weight']:.0%}\n"
     
     text_report += f"""
 -----------------------------------------------------------------
                        SIGNAL EVALUATION
 -----------------------------------------------------------------
 Overall Sentiment: {summary['overall_sentiment']}
-Weighted Score: {summary['weighted_score']}
+Normalized Score: {summary['weighted_score']:.2f} (range: -1.0 to +1.0)
+Raw Score: {summary.get('raw_score', 'N/A'):.2f}
 
 Signal Distribution:
 """
@@ -396,9 +480,13 @@ def main():
         epilog="""
 Examples:
   python cli.py fetch --emiten BBCA
+  python cli.py fetch --emiten BBCA --start 2025-01-01 --end 2025-12-31
   python cli.py analyze --emiten BBRI --timeframe weekly
+  python cli.py analyze --emiten TLKM --start 01-01-2025 --end 31-12-2025
   python cli.py score --emiten TLKM --timeframe daily
   python cli.py signal --emiten BBCA
+  python cli.py chart --emiten BBCA                    # Generate chart
+  python cli.py chart --emiten BBCA --start 2025-01-01 --end 2025-06-30
   python cli.py config view
   python cli.py interactive
         """
@@ -410,13 +498,19 @@ Examples:
     fetch_parser = subparsers.add_parser('fetch', help='Fetch stock data')
     fetch_parser.add_argument('--emiten', default='BBCA', help='Stock ticker')
     fetch_parser.add_argument('--interval', default='1d', choices=['1d', '1wk', '1mo'])
+    fetch_parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    fetch_parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
     fetch_parser.set_defaults(func=cmd_fetch)
-    
+
     # Analyze command
     analyze_parser = subparsers.add_parser('analyze', help='Run complete analysis')
     analyze_parser.add_argument('--emiten', default='BBCA', help='Stock ticker')
-    analyze_parser.add_argument('--timeframe', default='daily', 
+    analyze_parser.add_argument('--timeframe', default='daily',
                                 choices=['daily', 'weekly', 'monthly'])
+    analyze_parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    analyze_parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    analyze_parser.add_argument('--chart', action='store_true',
+                                help='Generate chart with indicators')
     analyze_parser.set_defaults(func=cmd_analyze)
     
     # Score command
@@ -424,6 +518,8 @@ Examples:
     score_parser.add_argument('--emiten', default='BBCA', help='Stock ticker')
     score_parser.add_argument('--timeframe', default='daily',
                              choices=['daily', 'weekly', 'monthly'])
+    score_parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    score_parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
     score_parser.set_defaults(func=cmd_score)
     
     # Signal command
@@ -433,10 +529,20 @@ Examples:
     
     # Config command
     config_parser = subparsers.add_parser('config', help='View/edit configuration')
-    config_parser.add_argument('action', choices=['view', 'edit'], 
+    config_parser.add_argument('action', choices=['view', 'edit'],
                               help='View or edit config')
     config_parser.set_defaults(func=cmd_config)
-    
+
+    # Chart command
+    chart_parser = subparsers.add_parser('chart', help='Generate stock chart with indicators')
+    chart_parser.add_argument('--emiten', default='BBCA', help='Stock ticker')
+    chart_parser.add_argument('--file', help='Input CSV file path (optional)')
+    chart_parser.add_argument('--output', help='Output chart file path (optional)')
+    chart_parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    chart_parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    chart_parser.add_argument('--timeframe', default='daily', help='Timeframe label for chart')
+    chart_parser.set_defaults(func=cmd_chart)
+
     # Report command
     report_parser = subparsers.add_parser('report', help='Generate reports')
     report_parser.add_argument('--emiten', default='BBCA', help='Stock ticker')

@@ -52,6 +52,7 @@ analyziz/
 ├── utils/
 │   └── __init__.py            # Utility functions
 ├── output/                    # Folder output (auto-generated)
+├── chart.py                   # Chart generation dengan mplfinance
 ├── main.py                    # Orchestrator utama (simple)
 ├── cli.py                     # Command Line Interface (advanced)
 ├── requirements.txt
@@ -80,14 +81,32 @@ python cli.py interactive
 # Fetch data saja
 python cli.py fetch --emiten BBCA
 
+# Fetch dengan range tanggal tertentu
+python cli.py fetch --emiten BBCA --start 2025-01-01 --end 2025-12-31
+python cli.py fetch --emiten BBRI --start 01-01-2025 --end 31-12-2025
+
 # Analisis lengkap
 python cli.py analyze --emiten BBRI --timeframe weekly
+
+# Analisis dengan range tanggal
+python cli.py analyze --emiten TLKM --start 2025-01-01 --end 2025-06-30
 
 # Scoring only
 python cli.py score --emiten TLKM --timeframe daily
 
+# Scoring dengan range tanggal
+python cli.py score --emiten BBCA --start 2025-01-01 --end 2025-12-31
+
 # Signal evaluation only
 python cli.py signal --emiten BBCA
+
+# Generate chart dengan indikator
+python cli.py chart --emiten BBCA
+python cli.py chart --emiten BBRI --start 2025-01-01 --end 2025-12-31
+python cli.py chart --emiten TLKM --output charts/tlkm_chart.png
+
+# Analisis lengkap + generate chart
+python cli.py analyze --emiten BBCA --chart
 
 # View configuration
 python cli.py config view
@@ -95,6 +114,12 @@ python cli.py config view
 # Generate reports dari data existing
 python cli.py report --emiten BBCA --timeframe daily
 ```
+
+**Format Tanggal yang Didukung:**
+- `YYYY-MM-DD` (contoh: 2025-01-01)
+- `DD-MM-YYYY` (contoh: 01-01-2025)
+- `YYYY/MM/DD` (contoh: 2025/01/01)
+- `DD/MM/YYYY` (contoh: 01/01/2025)
 
 ### Opsi 2: Main.py (Simple)
 
@@ -113,6 +138,14 @@ python main.py --timeframe monthly
 # Ganti emiten (default: BBCA)
 python main.py --emiten BBRI
 python main.py --emiten TLKM --timeframe weekly
+
+# Analisis dengan range tanggal tertentu
+python main.py --start 2025-01-01 --end 2025-12-31
+python main.py --emiten BBCA --start 01-01-2025 --end 31-12-2025
+
+# Analisis + generate chart
+python main.py --emiten BBCA --chart
+python main.py --emiten BBRI --start 2025-01-01 --end 2025-06-30 --chart
 ```
 
 ### Opsi 3: Step-by-Step (Advanced/Developer)
@@ -178,22 +211,35 @@ Semua parameter scoring dapat diubah di `config/scoring_config.py` tanpa menguba
 'monthly': 12,    # 12 bulan untuk evaluasi bulanan
 ```
 
-**2. Threshold Scoring** (`*_THRESHOLDS`)
+**2. Indicator Weights** (`INDICATOR_WEIGHTS`)
+Atur bobot masing-masing indikator dalam perhitungan overall score:
+```python
+INDICATOR_WEIGHTS = {
+    'MA20': 1.0,       # Bobot normal
+    'MA50': 1.2,       # 20% lebih penting dari MA20
+    'RSI': 1.0,        # Bobot normal
+    'MACD': 1.5,       # 50% lebih penting (prioritas momentum)
+    'EMA_Cross': 1.3,  # 30% lebih penting (trend following)
+}
+```
+Total bobot akan dinormalisasi otomatis (total = 100%).
+
+**3. Threshold Scoring** (`*_THRESHOLDS`)
 - `MA_THRESHOLDS` - Threshold untuk MA20/MA50
 - `RSI_THRESHOLDS` - Threshold overbought/oversold RSI
 - `MACD_THRESHOLDS` - Threshold bullish/bearish MACD
 - `EMA_CROSS_THRESHOLDS` - Threshold golden/death cross
 
-**3. Pattern Detection** (`*_CONFIG`)
+**4. Pattern Detection** (`*_CONFIG`)
 - `HAMMER_CONFIG` - Parameter deteksi hammer pattern
 - `SHOOTING_STAR_CONFIG` - Parameter deteksi shooting star
 - `DOJI_CONFIG` - Parameter deteksi doji
 - `MARUBOZU_CONFIG` - Parameter deteksi marubozu
 
-**4. Recommendation Rules** (`RECOMMENDATION_THRESHOLDS`)
+**5. Recommendation Rules** (`RECOMMENDATION_THRESHOLDS`)
 Atur aturan STRONG_BUY, BUY, SELL, STRONG_SELL, HOLD
 
-**5. Signal Weights** (`SIGNAL_*_WEIGHTS`)
+**6. Signal Weights** (`SIGNAL_*_WEIGHTS`)
 Atur bobot perhitungan sinyal candlestick
 
 ### Cara Mengubah Konfigurasi
@@ -226,11 +272,113 @@ Patterns yang dideteksi:
 - **Doji** - Indecision/konsolidasi
 - **Marubozu** - Trend kuat
 
-## Signal Strength
+## Signal Strength & Sentiment
+
+Signal strength dihitung berdasarkan kombinasi candlestick patterns, trend, dan body direction:
 
 ```
 STRONG_BULLISH > BULLISH > NEUTRAL > BEARISH > STRONG_BEARISH
 ```
+
+### Signal Weights
+Bobot sinyal untuk perhitungan overall sentiment:
+```python
+SIGNAL_STRENGTH_WEIGHTS = {
+    'STRONG_BULLISH': 2,   # Bobot tertinggi
+    'BULLISH': 1,          # Bobot positif
+    'NEUTRAL': 0,          # Tidak berpengaruh
+    'BEARISH': -1,         # Bobot negatif
+    'STRONG_BEARISH': -2,  # Bobot paling negatif
+}
+```
+
+### Sentiment Thresholds
+Overall sentiment ditentukan dari **normalized score** (range -1.0 sampai +1.0):
+
+| Normalized Score | Sentiment |
+|-----------------|-----------|
+| ≥ +0.5 | **STRONG_BULLISH** |
+| ≥ +0.2 | **BULLISH** |
+| ≤ -0.5 | **STRONG_BEARISH** |
+| ≤ -0.2 | **BEARISH** |
+| -0.2 sampai +0.2 | **NEUTRAL** |
+
+**Contoh perhitungan:**
+- Jika ada 8 BULLISH (8×1) dan 2 BEARISH (2×-1):  
+  Raw Score = 6, Normalized = 6/(2×10) = **+0.3** → **BULLISH** ✓
+- Jika ada 8 BEARISH (8×-1) dan 2 BULLISH (2×1):  
+  Raw Score = -6, Normalized = -6/(2×10) = **-0.3** → **BEARISH** ✓
+
+## Chart Generation
+
+Project ini support generate chart profesional dengan indikator teknikal menggunakan **mplfinance**.
+
+### Layout Chart
+
+```
+┌─────────────────────────────────────────┐
+│  Panel 0: Main Chart                    │
+│  • Candlestick (Price)                  │
+│  • MA20 (Cyan)                          │
+│  • MA50 (Orange)                        │
+│  • EMA12 (Purple dashed)                │
+│  • EMA26 (Yellow dashed)                │
+├─────────────────────────────────────────┤
+│  Panel 1: MACD                          │
+│  • MACD Line (Light Cyan)              │
+│  • Signal Line (Pink)                   │
+│  • Histogram (Green/Red bars)          │
+├─────────────────────────────────────────┤
+│  Panel 2: Volume                        │
+│  • Volume bars (Green/Red)             │
+└─────────────────────────────────────────┘
+```
+
+### Styling (Stockbit-Inspired)
+
+- **Dark theme**: Deep blue background (#1A1A2E)
+- **Panel background**: Slightly lighter (#16213E)
+- **Bullish candles**: Bright green (#00C853)
+- **Bearish candles**: Bright red (#FF3D00)
+- **Grid lines**: Subtle dark gray (#2D3748)
+- **Font**: Clean sans-serif, white text
+
+### Cara Generate Chart
+
+**Via CLI:**
+```bash
+# Generate chart saja
+python cli.py chart --emiten BBCA
+
+# Dengan range tanggal
+python cli.py chart --emiten BBCA --start 2025-01-01 --end 2025-12-31
+
+# Output ke path custom
+python cli.py chart --emiten BBRI --output reports/bbri_chart.png
+```
+
+**Via Main.py (analisis + chart):**
+```bash
+python main.py --emiten BBCA --chart
+```
+
+**Via Python Script:**
+```python
+from chart import generate_chart_from_file
+
+# Generate chart dari file
+generate_chart_from_file(
+    filepath='output/BBCA_past_3_year.csv',
+    emiten='BBCA',
+    start='2025-01-01',
+    end='2025-12-31',
+    output_path='output/bbca_chart.png'
+)
+```
+
+### Output File
+
+Chart disimpan sebagai file PNG di `output/{EMITEN}_chart.png`
 
 ## Disclaimer Penting
 
@@ -254,6 +402,8 @@ Project ini menggunakan library open-source berikut:
 | Library | Deskripsi | Link |
 |---------|-----------|------|
 | **yfinance** | Fetch data saham dari Yahoo Finance | [github.com/ranaroussi/yfinance](https://github.com/ranaroussi/yfinance) |
+| **mplfinance** | Financial market data visualization | [github.com/matplotlib/mplfinance](https://github.com/matplotlib/mplfinance) |
+| **matplotlib** | Plotting library | [matplotlib.org](https://matplotlib.org/) |
 | **pandas** | Data manipulation and analysis | [pandas.pydata.org](https://pandas.pydata.org/) |
 | **numpy** | Numerical computing | [numpy.org](https://numpy.org/) |
 
