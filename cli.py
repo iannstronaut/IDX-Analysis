@@ -36,31 +36,36 @@ sys.path.append('.')
 def print_header():
     """Print ASCII art header."""
     print("""
-╔══════════════════════════════════════════════════════════════╗
-║           IDX TECHNICAL ANALYSIS TOOL                        ║
-║           Command Line Interface                             ║
-╚══════════════════════════════════════════════════════════════╝
+==============================================================
+           IDX TECHNICAL ANALYSIS TOOL
+           Command Line Interface
+==============================================================
     """)
 
 
 def print_success(msg):
     """Print success message."""
-    print(f"✓ {msg}")
+    print(f"[OK] {msg}")
 
 
 def print_error(msg):
     """Print error message."""
-    print(f"✗ {msg}")
+    print(f"[ERROR] {msg}")
 
 
 def print_info(msg):
     """Print info message."""
-    print(f"ℹ {msg}")
+    print(f"[INFO] {msg}")
 
 
 def print_warning(msg):
     """Print warning message."""
-    print(f"⚠ {msg}")
+    print(f"[WARN] {msg}")
+
+
+def wait_for_enter(msg="\nPress Enter to continue..."):
+    """Wait for user to press Enter before continuing."""
+    input(msg)
 
 
 def cmd_fetch(args):
@@ -87,8 +92,10 @@ def cmd_fetch(args):
         print(f"\n  Total rows: {len(df)}")
         print(f"  Date range: {df['Date'].min().date()} to {df['Date'].max().date()}")
         print(f"  Columns: {', '.join(df.columns)}")
+        wait_for_enter()
     except Exception as e:
         print_error(f"Failed to fetch data: {e}")
+        wait_for_enter()
         return 1
 
     return 0
@@ -166,11 +173,13 @@ def cmd_analyze(args):
         print(f"\nOutput files in output/ directory")
         if args.chart:
             print(f"  - {chart_path}")
-        
+        wait_for_enter()
+
     except Exception as e:
         print_error(f"Analysis failed: {e}")
+        wait_for_enter()
         return 1
-    
+
     return 0
 
 
@@ -195,10 +204,12 @@ def cmd_score(args):
             end=args.end
         )
         print_success(f"Scoring complete! Overall: {scorer.get_overall_score()}/100")
+        wait_for_enter()
     except Exception as e:
         print_error(f"Scoring failed: {e}")
+        wait_for_enter()
         return 1
-    
+
     return 0
 
 
@@ -213,10 +224,12 @@ def cmd_signal(args):
         evaluator = run_signal_evaluation(emiten=args.emiten)
         summary = evaluator.get_summary()
         print_success(f"Signal evaluation complete! Sentiment: {summary['overall_sentiment']}")
+        wait_for_enter()
     except Exception as e:
         print_error(f"Signal evaluation failed: {e}")
+        wait_for_enter()
         return 1
-    
+
     return 0
 
 
@@ -245,8 +258,10 @@ def cmd_config(args):
             print("  - *_CONFIG: Change pattern detection parameters")
         else:
             print_error("Config file not found!")
+            wait_for_enter()
             return 1
 
+    wait_for_enter()
     return 0
 
 
@@ -274,10 +289,12 @@ def cmd_chart(args):
         )
         print_success(f"Chart generated successfully!")
         print(f"\n  Saved to: {output_path}")
+        wait_for_enter()
     except Exception as e:
         print_error(f"Chart generation failed: {e}")
         import traceback
         traceback.print_exc()
+        wait_for_enter()
         return 1
 
     return 0
@@ -321,57 +338,147 @@ def cmd_report(args):
         print(f"\nFiles created:")
         print(f"  - output/{args.emiten}_summary_report.txt")
         print(f"  - output/{args.emiten}_report_{args.timeframe}.csv")
-        
+        wait_for_enter()
+
     except Exception as e:
         print_error(f"Report generation failed: {e}")
+        wait_for_enter()
         return 1
-    
+
     return 0
 
 
-def cmd_interactive(args):
-    """Command: Interactive wizard mode."""
-    print_header()
-    print("Welcome to Interactive Mode!\n")
-    
-    # Step 1: Get emiten
-    print("Step 1: Select Stock")
-    print("-" * 40)
+def get_analysis_input():
+    """Get stock and timeframe input from user."""
+    print("\n--- Analysis Configuration ---")
     emiten = input("Enter stock ticker (default: BBCA): ").strip().upper() or "BBCA"
-    
-    # Step 2: Get timeframe
-    print("\nStep 2: Select Timeframe")
-    print("-" * 40)
+
+    print("\nTimeframe options:")
     print("1. Daily (20 days)")
     print("2. Weekly (12 weeks)")
     print("3. Monthly (12 months)")
-    
+
     tf_choice = input("Select [1-3] (default: 1): ").strip() or "1"
     timeframe_map = {"1": "daily", "2": "weekly", "3": "monthly"}
     timeframe = timeframe_map.get(tf_choice, "daily")
-    
-    # Step 3: Confirm
-    print(f"\nStep 3: Confirm")
-    print("-" * 40)
-    print(f"Stock: {emiten}.JK")
-    print(f"Timeframe: {timeframe}")
-    
+
+    chart = input("\nGenerate chart? [y/N]: ").strip().lower() == 'y'
+
+    print(f"\nConfiguration:")
+    print(f"  Stock: {emiten}.JK")
+    print(f"  Timeframe: {timeframe}")
+    print(f"  Generate chart: {'Yes' if chart else 'No'}")
+
     confirm = input("\nProceed? [Y/n]: ").strip().lower()
     if confirm in ('n', 'no'):
-        print("Cancelled.")
-        return 0
-    
-    # Run analysis
+        return None
+
+    return emiten, timeframe, chart
+
+
+def cmd_interactive(args):
+    """Command: Interactive wizard mode with loop."""
+    print_header()
+    print("Welcome to Interactive Mode!")
+    print("Type 'exit' or 'quit' at any prompt to exit.\n")
+
+    while True:
+        show_interactive_menu()
+        choice = input("\nSelect option [1-5]: ").strip()
+
+        if choice in ('5', 'exit', 'quit'):
+            print("\nExiting Interactive Mode. Goodbye!")
+            break
+
+        if choice == '1':
+            # Run Complete Analysis
+            config = get_analysis_input()
+            if config:
+                emiten, timeframe, chart = config
+
+                class Args:
+                    pass
+
+                a = Args()
+                a.emiten = emiten
+                a.timeframe = timeframe
+                a.interval = "1d"
+                a.chart = chart
+                a.start = None
+                a.end = None
+
+                print("\n" + "="*60)
+                cmd_analyze(a)
+
+        elif choice == '2':
+            # Fetch Data Only
+            print("\n--- Fetch Data ---")
+            emiten = input("Enter stock ticker (default: BBCA): ").strip().upper() or "BBCA"
+
+            class Args:
+                pass
+
+            a = Args()
+            a.emiten = emiten
+            a.interval = "1d"
+            a.start = None
+            a.end = None
+
+            cmd_fetch(a)
+
+        elif choice == '3':
+            # Generate Chart Only
+            print("\n--- Generate Chart ---")
+            emiten = input("Enter stock ticker (default: BBCA): ").strip().upper() or "BBCA"
+
+            print("\nTimeframe options:")
+            print("1. Daily (20 days)")
+            print("2. Weekly (12 weeks)")
+            print("3. Monthly (12 months)")
+
+            tf_choice = input("Select [1-3] (default: 1): ").strip() or "1"
+            timeframe_map = {"1": "daily", "2": "weekly", "3": "monthly"}
+            timeframe = timeframe_map.get(tf_choice, "daily")
+
+            class Args:
+                pass
+
+            a = Args()
+            a.emiten = emiten
+            a.file = None
+            a.output = None
+            a.start = None
+            a.end = None
+            a.timeframe = timeframe
+
+            cmd_chart(a)
+
+        elif choice == '4':
+            # View Configuration
+            class Args:
+                pass
+
+            a = Args()
+            a.action = 'view'
+            cmd_config(a)
+
+        else:
+            print("\nInvalid option. Please try again.")
+
+    return 0
+
+
+def show_interactive_menu():
+    """Display the interactive main menu."""
     print("\n" + "="*60)
-    class Args:
-        pass
-    
-    args = Args()
-    args.emiten = emiten
-    args.timeframe = timeframe
-    args.interval = "1d"
-    
-    return cmd_analyze(args)
+    print("INTERACTIVE MODE - MAIN MENU")
+    print("="*60)
+    print("\n1. Run Complete Analysis")
+    print("2. Fetch Data Only")
+    print("3. Generate Chart Only")
+    print("4. View Configuration")
+    print("5. Exit")
+    print("-"*60)
 
 
 def generate_reports(df, scorer, evaluator, emiten, timeframe):
@@ -557,11 +664,11 @@ Examples:
     
     # Parse args
     args = parser.parse_args()
-    
+
     if not args.command:
-        parser.print_help()
-        return 0
-    
+        # Default to interactive mode when no command provided
+        return cmd_interactive(args)
+
     # Run command
     return args.func(args)
 
