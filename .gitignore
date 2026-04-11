@@ -36,6 +36,7 @@ env/
 
 # Project specific - output files (can be regenerated)
 output/*.csv
+output/*.png
 output/*.txt
 !output/.gitkeep
 

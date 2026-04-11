@@ -1,0 +1,24 @@
+services:
+  analyziz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: analyziz:latest
+    container_name: analyziz
+    volumes:
+      # Mount output directory to host for persistent storage
+      - ./output:/app/output
+      # Optional: Mount cache for faster subsequent runs
+      - analyziz-cache:/tmp/matplotlib
+    environment:
+      - TZ=Asia/Jakarta
+      - PYTHONUNBUFFERED=1
+    # Run as interactive bash shell
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/sh"]
+    # Default to shell - user can run: python main.py --emiten BBCA --chart
+
+volumes:
+  analyziz-cache:

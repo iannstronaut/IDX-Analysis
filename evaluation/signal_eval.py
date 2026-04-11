@@ -41,13 +41,21 @@ except ImportError:
     DOJI_CONFIG = {'max_body_ratio': 0.1}
     MARUBOZU_CONFIG = {'min_body_ratio': 0.9}
     TREND_CONFIG = {'lookback_periods': 5, 'uptrend_threshold': 3, 'downtrend_threshold': -3}
-    SENTIMENT_THRESHOLDS = {'bullish': 1.0, 'bearish': -1.0}
+    SENTIMENT_THRESHOLDS = {
+        'strong_bullish': 0.5, 'bullish': 0.2,
+        'bearish': -0.2, 'strong_bearish': -0.5
+    }
     SUMMARY_CONFIG = {'recent_signals_count': 5, 'signal_distribution_periods': 20}
-    
-    def get_sentiment(score):
-        if score > 1.0:
+
+    def get_sentiment(weighted_score):
+        """Fallback sentiment function."""
+        if weighted_score >= 0.5:
+            return 'STRONG_BULLISH'
+        elif weighted_score >= 0.2:
             return 'BULLISH'
-        elif score < -1.0:
+        elif weighted_score <= -0.5:
+            return 'STRONG_BEARISH'
+        elif weighted_score <= -0.2:
             return 'BEARISH'
         return 'NEUTRAL'
 
@@ -291,34 +299,46 @@ class SignalEvaluator:
         """Get summary of recent signals using config."""
         if last_n is None:
             last_n = SUMMARY_CONFIG.get('signal_distribution_periods', 20)
-        
+
         recent = self.signals[-last_n:]
-        
+
         counts = {
             'STRONG_BULLISH': 0, 'BULLISH': 0, 'NEUTRAL': 0,
             'BEARISH': 0, 'STRONG_BEARISH': 0
         }
-        
+
         for sig in recent:
             counts[sig['signal']] += 1
-        
-        # Calculate weighted score
-        total_score = sum(
-            self.cfg_weights[sig['signal']] 
+
+        # Calculate weighted score with proper weights
+        total_weighted_score = sum(
+            self.cfg_weights[sig['signal']]
             for sig in recent
         )
-        
-        avg_score = total_score / len(recent) if recent else 0
-        
+
+        # Calculate max possible score untuk normalisasi (-2 to +2 range)
+        max_possible = 2 * len(recent)  # Jika semua STRONG_BULLISH (+2)
+        min_possible = -2 * len(recent)  # Jika semua STRONG_BEARISH (-2)
+
+        # Normalized score: -1.0 to +1.0 scale
+        if recent:
+            normalized_score = total_weighted_score / (2 * len(recent))  # Scale ke -1 sampai 1
+        else:
+            normalized_score = 0
+
+        # Raw average untuk debug
+        avg_score = total_weighted_score / len(recent) if recent else 0
+
         # Use config to determine sentiment
-        sentiment = get_sentiment(avg_score)
-        
+        sentiment = get_sentiment(normalized_score)
+
         recent_count = SUMMARY_CONFIG.get('recent_signals_count', 5)
-        
+
         return {
             'periods_analyzed': last_n,
             'signal_counts': counts,
-            'weighted_score': round(avg_score, 2),
+            'weighted_score': round(normalized_score, 2),
+            'raw_score': round(avg_score, 2),
             'overall_sentiment': sentiment,
             'recent_signals': recent[-recent_count:]
         }
@@ -326,25 +346,42 @@ class SignalEvaluator:
     def print_report(self):
         """Print signal evaluation report."""
         summary = self.get_summary()
-        
+
         print("\n" + "=" * 60)
         print("SIGNAL EVALUATION REPORT")
         print("=" * 60)
-        
+
         print(f"\nPeriods Analyzed: {summary['periods_analyzed']}")
-        print("\nSignal Distribution:")
+        print("\nSignal Distribution (with Weights):")
+
+        total_bullish = summary['signal_counts']['STRONG_BULLISH'] + summary['signal_counts']['BULLISH']
+        total_bearish = summary['signal_counts']['STRONG_BEARISH'] + summary['signal_counts']['BEARISH']
+        neutral = summary['signal_counts']['NEUTRAL']
+
         for signal, count in summary['signal_counts'].items():
-            bar = "█" * count + "░" * (summary['periods_analyzed'] - count)
-            print(f"  {signal:16} : {bar} ({count})")
-        
-        print(f"\nWeighted Score: {summary['weighted_score']}")
-        print(f"Overall Sentiment: {summary['overall_sentiment']}")
-        
+            weight = self.cfg_weights[signal]
+            bar = "#" * count + "-" * (summary['periods_analyzed'] - count)
+            print(f"  {signal:16} : {bar} ({count}) [weight: {weight:+d}]")
+
+        print(f"\n{'-' * 60}")
+        print(f"  Bullish Total : {total_bullish}")
+        print(f"  Bearish Total : {total_bearish}")
+        print(f"  Neutral       : {neutral}")
+        print(f"{'-' * 60}")
+
+        print(f"\nScore Calculation:")
+        print(f"  Raw Score       : {summary['raw_score']:+.2f}")
+        print(f"  Normalized Score: {summary['weighted_score']:+.2f} (range: -1.0 to +1.0)")
+        print(f"  Formula         : sum(weights) / (2 x count)")
+        print(f"  Threshold       : >=0.5 Strong, >=0.2 Bull, <=-0.2 Bear, <=-0.5 Strong")
+
+        print(f"\nOverall Sentiment: {summary['overall_sentiment']}")
+
         print("\nRecent Signals (Last {}):".format(len(summary['recent_signals'])))
         for sig in summary['recent_signals']:
             patterns = ", ".join(sig['patterns']) if sig['patterns'] else "None"
             print(f"  {sig['date'].date()} | {sig['signal']:16} | Patterns: {patterns}")
-        
+
         print("=" * 60)
 
 

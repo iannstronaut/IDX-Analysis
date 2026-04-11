@@ -125,51 +125,76 @@ def add_all_indicators(df):
     return df
 
 
-def process_and_save(emiten="BBCA", interval="1d"):
+def process_and_save(emiten="BBCA", interval="1d", start=None, end=None, period="3y"):
     """
     Fetch data, add indicators, save to data/{emiten}_past_3_year.csv
-    
+
     Parameters:
     -----------
     emiten : str
         Stock ticker (default: BBCA)
     interval : str
         Data interval ('1d', '1wk', '1mo')
+    start : str, optional
+        Start date (format: YYYY-MM-DD or DD-MM-YYYY)
+    end : str, optional
+        End date (format: YYYY-MM-DD or DD-MM-YYYY)
+    period : str, optional
+        Period to download if start/end not provided (default: '3y')
     """
     from data.fetch_data import download_stock_data, save_data
-    
+
+    # Determine date range description
+    if start and end:
+        range_desc = f"{start} to {end}"
+    elif start:
+        range_desc = f"from {start}"
+    elif end:
+        range_desc = f"until {end}"
+    else:
+        range_desc = f"3 Years"
+
     print(f"\n{'='*60}")
-    print(f"Processing {emiten}.JK - 3 Years Data with Indicators")
+    print(f"Processing {emiten}.JK - {range_desc} with Indicators")
     print(f"{'='*60}\n")
-    
-    # Fetch 3 years data
-    df = download_stock_data(emiten=emiten, period="3y", interval=interval)
-    
+
+    # Fetch data (by date range or period)
+    df = download_stock_data(emiten=emiten, period=period, interval=interval, start=start, end=end)
+
     # Add all indicators
     df = add_all_indicators(df)
-    
+
     # Save to file with emiten name
     filename = f"output/{emiten.upper()}_past_3_year.csv"
     save_data(df, filename)
-    
+
     print(f"\n{'='*60}")
     print(f"Complete! File saved: {filename}")
     print(f"{'='*60}")
     print(f"\nData shape: {df.shape}")
     print(f"Date range: {df['Date'].min().date()} to {df['Date'].max().date()}")
     print(f"\nColumns: {list(df.columns)}")
-    
+
     return df
 
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Add indicators to stock data')
     parser.add_argument('--emiten', default='BBCA', help='Stock ticker (default: BBCA)')
     parser.add_argument('--interval', default='1d', choices=['1d', '1wk', '1mo'],
                        help='Data interval')
-    
+    parser.add_argument('--start', help='Start date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    parser.add_argument('--end', help='End date (format: YYYY-MM-DD or DD-MM-YYYY)')
+    parser.add_argument('--period', default='3y', help='Download period (default: 3y)')
+
     args = parser.parse_args()
-    
-    process_and_save(emiten=args.emiten, interval=args.interval)
+
+    process_and_save(
+        emiten=args.emiten,
+        interval=args.interval,
+        start=args.start,
+        end=args.end,
+        period=args.period
+    )
